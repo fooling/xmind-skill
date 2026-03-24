@@ -326,6 +326,237 @@ class XMindBuilder {
     }
 }
 
+// ─── XMind 8 Legacy XML builder ───
+
+function escapeXml(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+}
+
+function topicToXml(topic, indent = '      ') {
+    const attrs = [`id="${escapeXml(topic.id)}"`];
+    if (topic.structureClass) attrs.push(`structure-class="${escapeXml(topic.structureClass)}"`);
+    if (topic.href) attrs.push(`xlink:href="${escapeXml(topic.href)}"`);
+
+    let xml = `${indent}<topic ${attrs.join(' ')}>\n`;
+    xml += `${indent}  <title>${escapeXml(topic.title)}</title>\n`;
+
+    // Position
+    if (topic.position) {
+        xml += `${indent}  <position svg:x="${topic.position.x}" svg:y="${topic.position.y}"/>\n`;
+    }
+
+    // Style (shape)
+    if (topic.style?.properties?.['shape-class']) {
+        xml += `${indent}  <style>\n`;
+        xml += `${indent}    <topic-properties shape-class="${escapeXml(topic.style.properties['shape-class'])}"/>\n`;
+        xml += `${indent}  </style>\n`;
+    }
+
+    // Notes
+    if (topic.notes) {
+        xml += `${indent}  <notes>\n`;
+        if (topic.notes.plain) {
+            xml += `${indent}    <plain>${escapeXml(topic.notes.plain.content)}</plain>\n`;
+        }
+        if (topic.notes.realHTML) {
+            xml += `${indent}    <html><![CDATA[${topic.notes.realHTML.content}]]></html>\n`;
+        }
+        xml += `${indent}  </notes>\n`;
+    }
+
+    // Labels
+    if (topic.labels?.length > 0) {
+        xml += `${indent}  <labels>\n`;
+        for (const label of topic.labels) {
+            xml += `${indent}    <label>${escapeXml(label)}</label>\n`;
+        }
+        xml += `${indent}  </labels>\n`;
+    }
+
+    // Markers
+    if (topic.markers?.length > 0) {
+        xml += `${indent}  <marker-refs>\n`;
+        for (const m of topic.markers) {
+            xml += `${indent}    <marker-ref marker-id="${escapeXml(m.markerId)}"/>\n`;
+        }
+        xml += `${indent}  </marker-refs>\n`;
+    }
+
+    // Boundaries
+    if (topic.boundaries?.length > 0) {
+        xml += `${indent}  <boundaries>\n`;
+        for (const b of topic.boundaries) {
+            if (b.title) {
+                xml += `${indent}    <boundary id="${escapeXml(b.id)}" range="${escapeXml(b.range)}">\n`;
+                xml += `${indent}      <title>${escapeXml(b.title)}</title>\n`;
+                xml += `${indent}    </boundary>\n`;
+            } else {
+                xml += `${indent}    <boundary id="${escapeXml(b.id)}" range="${escapeXml(b.range)}"/>\n`;
+            }
+        }
+        xml += `${indent}  </boundaries>\n`;
+    }
+
+    // Summaries
+    if (topic.summaries?.length > 0) {
+        xml += `${indent}  <summaries>\n`;
+        for (const s of topic.summaries) {
+            xml += `${indent}    <summary id="${escapeXml(s.id)}" range="${escapeXml(s.range)}" topic-id="${escapeXml(s.topicId)}"/>\n`;
+        }
+        xml += `${indent}  </summaries>\n`;
+    }
+
+    // Extensions (task info)
+    if (topic.extensions?.length > 0) {
+        xml += `${indent}  <extensions>\n`;
+        for (const ext of topic.extensions) {
+            xml += `${indent}    <extension provider="${escapeXml(ext.provider)}">\n`;
+            xml += `${indent}      <content>\n`;
+            const c = ext.content;
+            if (c.status) xml += `${indent}        <status>${escapeXml(c.status)}</status>\n`;
+            if (c.progress !== undefined) xml += `${indent}        <progress>${c.progress}</progress>\n`;
+            if (c.priority !== undefined) xml += `${indent}        <priority>${c.priority}</priority>\n`;
+            if (c.start !== undefined) xml += `${indent}        <start>${c.start}</start>\n`;
+            if (c.due !== undefined) xml += `${indent}        <due>${c.due}</due>\n`;
+            if (c.duration !== undefined) xml += `${indent}        <duration>${c.duration}</duration>\n`;
+            if (c.dependencies?.length > 0) {
+                xml += `${indent}        <dependencies>\n`;
+                for (const dep of c.dependencies) {
+                    xml += `${indent}          <dependency id="${escapeXml(dep.id)}" type="${escapeXml(dep.type)}" lag="${dep.lag}"/>\n`;
+                }
+                xml += `${indent}        </dependencies>\n`;
+            }
+            xml += `${indent}      </content>\n`;
+            xml += `${indent}    </extension>\n`;
+        }
+        xml += `${indent}  </extensions>\n`;
+    }
+
+    // Children — XMind 8 uses <topics type="attached|detached|callout|summary">
+    const hasAttached = topic.children?.attached?.length > 0;
+    const hasCallout = topic.children?.callout?.length > 0;
+    const hasDetached = topic.children?.detached?.length > 0;
+    // Summary topics go under <children><topics type="summary"> in XMind 8
+    const hasSummaryTopics = topic.summary?.length > 0;
+
+    if (hasAttached || hasCallout || hasDetached || hasSummaryTopics) {
+        xml += `${indent}  <children>\n`;
+        if (hasAttached) {
+            xml += `${indent}    <topics type="attached">\n`;
+            for (const child of topic.children.attached) {
+                xml += topicToXml(child, indent + '      ');
+            }
+            xml += `${indent}    </topics>\n`;
+        }
+        if (hasCallout) {
+            xml += `${indent}    <topics type="callout">\n`;
+            for (const child of topic.children.callout) {
+                xml += `${indent}      <topic id="${escapeXml(child.id)}">\n`;
+                xml += `${indent}        <title>${escapeXml(child.title)}</title>\n`;
+                xml += `${indent}      </topic>\n`;
+            }
+            xml += `${indent}    </topics>\n`;
+        }
+        if (hasDetached) {
+            xml += `${indent}    <topics type="detached">\n`;
+            for (const child of topic.children.detached) {
+                xml += topicToXml(child, indent + '      ');
+            }
+            xml += `${indent}    </topics>\n`;
+        }
+        if (hasSummaryTopics) {
+            xml += `${indent}    <topics type="summary">\n`;
+            for (const st of topic.summary) {
+                xml += `${indent}      <topic id="${escapeXml(st.id)}">\n`;
+                xml += `${indent}        <title>${escapeXml(st.title)}</title>\n`;
+                xml += `${indent}      </topic>\n`;
+            }
+            xml += `${indent}    </topics>\n`;
+        }
+        xml += `${indent}  </children>\n`;
+    }
+
+    xml += `${indent}</topic>\n`;
+    return xml;
+}
+
+function buildLegacyXml(contentJson) {
+    let xml = '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n';
+    xml += '<xmap-content xmlns="urn:xmind:xmap:xmlns:content:2.0"';
+    xml += ' xmlns:fo="http://www.w3.org/1999/XSL/Format"';
+    xml += ' xmlns:svg="http://www.w3.org/2000/svg"';
+    xml += ' xmlns:xhtml="http://www.w3.org/1999/xhtml"';
+    xml += ' xmlns:xlink="http://www.w3.org/1999/xlink"';
+    xml += ' version="2.0">\n';
+
+    for (const sheet of contentJson) {
+        xml += `  <sheet id="${escapeXml(sheet.id)}">\n`;
+        xml += `    <title>${escapeXml(sheet.title)}</title>\n`;
+        xml += topicToXml(sheet.rootTopic, '    ');
+
+        // Relationships
+        if (sheet.relationships?.length > 0) {
+            xml += '    <relationships>\n';
+            for (const rel of sheet.relationships) {
+                const relAttrs = [`id="${escapeXml(rel.id)}"`, `end1="${escapeXml(rel.end1Id)}"`, `end2="${escapeXml(rel.end2Id)}"`];
+                const hasChildren = rel.title || rel.style || rel.controlPoints;
+                if (hasChildren) {
+                    xml += `      <relationship ${relAttrs.join(' ')}>\n`;
+                    if (rel.title) xml += `        <title>${escapeXml(rel.title)}</title>\n`;
+                    if (rel.style?.properties?.['shape-class']) {
+                        xml += `        <style>\n`;
+                        xml += `          <relationship-properties shape-class="${escapeXml(rel.style.properties['shape-class'])}"/>\n`;
+                        xml += `        </style>\n`;
+                    }
+                    if (rel.controlPoints?.length > 0) {
+                        xml += '        <control-points>\n';
+                        rel.controlPoints.forEach((cp, i) => {
+                            const cpAttrs = [`index="${i}"`];
+                            if (cp.amount !== undefined) cpAttrs.push(`amount="${cp.amount}"`);
+                            if (cp.angle !== undefined) cpAttrs.push(`angle="${cp.angle}"`);
+                            xml += `          <control-point ${cpAttrs.join(' ')}/>\n`;
+                        });
+                        xml += '        </control-points>\n';
+                    }
+                    xml += '      </relationship>\n';
+                } else {
+                    xml += `      <relationship ${relAttrs.join(' ')}/>\n`;
+                }
+            }
+            xml += '    </relationships>\n';
+        }
+
+        xml += '  </sheet>\n';
+    }
+
+    xml += '</xmap-content>\n';
+    return xml;
+}
+
+function buildLegacyMeta() {
+    let xml = '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n';
+    xml += '<meta xmlns="urn:xmind:xmap:xmlns:meta:2.0" version="2.0">\n';
+    xml += '  <Creator><Name>xmind-skill</Name><Version>1.0.0</Version></Creator>\n';
+    xml += '</meta>\n';
+    return xml;
+}
+
+function buildLegacyManifest(fileEntries) {
+    let xml = '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n';
+    xml += '<manifest xmlns="urn:xmind:xmap:xmlns:manifest:1.0">\n';
+    for (const entry of Object.keys(fileEntries)) {
+        const mediaType = entry.endsWith('.xml') ? 'text/xml' : '';
+        xml += `  <file-entry full-path="${escapeXml(entry)}"${mediaType ? ` media-type="${mediaType}"` : ''}/>\n`;
+    }
+    xml += '</manifest>\n';
+    return xml;
+}
+
 // Main
 async function main() {
     let rawInput = '';
@@ -342,22 +573,96 @@ async function main() {
         process.exit(1);
     }
 
+    // ─── Format / version resolution ───
+    // Accepts many aliases so that any editor or user can specify a familiar version string.
+    //
+    // Legacy (XML-based, XMind 8 and earlier):
+    //   "legacy", "xml", "xmind8", "xmind7", "xmind6", "xmind3",
+    //   "8", "7", "6", "3", "2008", "2009", "2010", "2011", "2012", "2013"
+    //
+    // Modern (JSON-based, XMind Zen / 2020+):
+    //   "zen", "json", "xmind2020", "xmind2021", "xmind2022", "xmind2023", "xmind2024", "xmind2025", "xmind2026",
+    //   "2020", "2021", "2022", "2023", "2024", "2025", "2026", "latest", "new"
+    //
+    // Default (no format specified): "zen"
+
+    const LEGACY_ALIASES = new Set([
+        'legacy', 'xml', 'old',
+        'xmind8', 'xmind7', 'xmind6', 'xmind5', 'xmind4', 'xmind3',
+        'xmind-8', 'xmind-7', 'xmind-6',
+        '8', '7', '6', '5', '4', '3',
+        '2008', '2009', '2010', '2011', '2012', '2013',
+        'xmind2008', 'xmind2009', 'xmind2010', 'xmind2011', 'xmind2012', 'xmind2013',
+        'pro8', 'pro7', 'pro6',
+    ]);
+
+    const ZEN_ALIASES = new Set([
+        'zen', 'json', 'new', 'latest', 'modern',
+        'xmindzen', 'xmind-zen',
+        'xmind2020', 'xmind2021', 'xmind2022', 'xmind2023', 'xmind2024', 'xmind2025', 'xmind2026',
+        'xmind-2020', 'xmind-2021', 'xmind-2022', 'xmind-2023', 'xmind-2024', 'xmind-2025', 'xmind-2026',
+        '2020', '2021', '2022', '2023', '2024', '2025', '2026',
+        '10', '11', '12', '13', '14',
+    ]);
+
+    const rawFormat = (input.format || 'zen').toString().toLowerCase().replace(/\s+/g, '');
+    let resolvedFormat;
+    if (LEGACY_ALIASES.has(rawFormat)) {
+        resolvedFormat = 'legacy';
+    } else if (ZEN_ALIASES.has(rawFormat)) {
+        resolvedFormat = 'zen';
+    } else {
+        // Heuristic: numbers <= 13 are version-based (XMind 3~8 = legacy, 10+ = zen-era)
+        // Years <= 2019 are legacy, >= 2020 are zen
+        const num = parseInt(rawFormat, 10);
+        if (!isNaN(num)) {
+            if (num <= 9) resolvedFormat = 'legacy';       // XMind 3-8
+            else if (num <= 99) resolvedFormat = 'zen';     // XMind 10+
+            else if (num <= 2019) resolvedFormat = 'legacy'; // years up to 2019
+            else resolvedFormat = 'zen';                     // 2020+
+        } else {
+            console.error(`Warning: unknown format "${input.format}", defaulting to zen (modern JSON format).`);
+            console.error('  Legacy (XML):  "xmind8", "legacy", "xml", "8", "2013"');
+            console.error('  Modern (JSON): "zen", "latest", "xmind2024", "2024"');
+            resolvedFormat = 'zen';
+        }
+    }
+
     const builder = new XMindBuilder();
     const { contentJson, attachments } = builder.build(input.sheets);
-    const { content, metadata, manifest, resourceFiles } = await builder.finalize(contentJson, attachments);
 
     const resolvedPath = resolve(outputPath);
     await mkdir(dirname(resolvedPath), { recursive: true });
 
-    const zipBuffer = buildZip([
-        { name: 'content.json', data: Buffer.from(content, 'utf-8') },
-        { name: 'metadata.json', data: Buffer.from(metadata, 'utf-8') },
-        { name: 'manifest.json', data: Buffer.from(manifest, 'utf-8') },
-        ...resourceFiles,
-    ]);
-    await writeFile(resolvedPath, zipBuffer);
+    if (resolvedFormat === 'legacy') {
+        // Legacy XML format (XMind 3–8 compatible)
+        const { resourceFiles } = await builder.finalize(contentJson, attachments);
+        const contentXml = buildLegacyXml(contentJson);
+        const metaXml = buildLegacyMeta();
+        const fileEntries = { 'content.xml': {}, 'meta.xml': {}, 'META-INF/manifest.xml': {} };
+        for (const rf of resourceFiles) fileEntries[rf.name] = {};
+        const manifestXml = buildLegacyManifest(fileEntries);
 
-    console.log(`Created: ${resolvedPath}`);
+        const zipBuffer = buildZip([
+            { name: 'content.xml', data: Buffer.from(contentXml, 'utf-8') },
+            { name: 'meta.xml', data: Buffer.from(metaXml, 'utf-8') },
+            { name: 'META-INF/manifest.xml', data: Buffer.from(manifestXml, 'utf-8') },
+            ...resourceFiles,
+        ]);
+        await writeFile(resolvedPath, zipBuffer);
+        console.log(`Created (XMind 8 / legacy XML format): ${resolvedPath}`);
+    } else {
+        // Modern JSON format (XMind Zen / 2020+)
+        const { content, metadata, manifest, resourceFiles } = await builder.finalize(contentJson, attachments);
+        const zipBuffer = buildZip([
+            { name: 'content.json', data: Buffer.from(content, 'utf-8') },
+            { name: 'metadata.json', data: Buffer.from(metadata, 'utf-8') },
+            { name: 'manifest.json', data: Buffer.from(manifest, 'utf-8') },
+            ...resourceFiles,
+        ]);
+        await writeFile(resolvedPath, zipBuffer);
+        console.log(`Created (XMind Zen / modern JSON format): ${resolvedPath}`);
+    }
 }
 
 main().catch(err => {

@@ -1,48 +1,24 @@
 {
-  "name": "@41px/mcp-xmind",
-  "version": "2.1.1",
-  "description": "MCP server for XMind",
-  "mcpName": "io.github.apeyroux/mcp-xmind",
+  "name": "@41px/xmind-skill",
+  "version": "3.0.0",
+  "description": "Claude Code / Claude Desktop skill for creating and reading XMind mind maps",
   "repository": {
     "type": "git",
     "url": "https://github.com/apeyroux/mcp-xmind"
   },
   "homepage": "https://github.com/apeyroux/mcp-xmind#readme",
   "keywords": [
-    "mcp",
     "xmind",
     "mindmap",
-    "model-context-protocol"
+    "skill",
+    "claude-code",
+    "claude-desktop"
   ],
   "license": "MIT",
   "author": "Alexandre Peyroux <alex@fmap.it>",
-  "type": "module",
-  "bin": {
-    "mcp-server-xmind": "dist/index.js"
-  },
-  "files": [
-    "dist"
-  ],
   "scripts": {
-    "build": "tsc && shx chmod +x dist/*.js",
-    "prepare": "npm run build",
-    "watch": "tsc --watch",
-    "test": "vitest run",
-    "test:watch": "vitest"
-  },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.11.0",
-    "adm-zip": "^0.5.16",
-    "glob": "^10.3.10",
-    "minimatch": "^10.0.1",
-    "zod": "^3.25.0"
-  },
-  "devDependencies": {
-    "@types/adm-zip": "^0.5.7",
-    "@types/minimatch": "^5.1.2",
-    "@types/node": "^20.17.10",
-    "shx": "^0.3.4",
-    "typescript": "^5.7.2",
-    "vitest": "^2.1.0"
+    "build:skill": "bash scripts/build-skill.sh",
+    "test:create": "echo '{\"path\":\"/tmp/test.xmind\",\"sheets\":[{\"title\":\"T\",\"rootTopic\":{\"title\":\"R\"}}]}' | node skills/xmind/scripts/create_xmind.mjs",
+    "test:read": "echo '{\"action\":\"read\",\"path\":\"/tmp/test.xmind\"}' | node skills/xmind/scripts/read_xmind.mjs"
   }
 }

@@ -1,14 +1,59 @@
 ---
 name: xmind
 description: >
-  Create XMind mind map files (.xmind). Use this skill when the user asks to create a mind map,
-  mindmap, XMind file, or brainstorming diagram. Produces native .xmind files that open directly
-  in the XMind application.
+  Create and read XMind mind map files (.xmind), supporting both modern (XMind Zen/2020+) and legacy (XMind 8) formats.
+  Use this skill whenever the user mentions mind maps,
+  brain maps, XMind, brainstorming diagrams, flowcharts, Gantt charts, project planning with visual maps,
+  or wants to analyze/search existing .xmind files. Trigger on both English and Chinese expressions:
+  "思维导图", "脑图", "脑图文件", "xmind", "mind map", "mindmap", "画个脑图", "做个思维导图",
+  "创建脑图", "打开脑图", "分析思维导图", "看看这个xmind", "甘特图", "流程图", "逻辑图",
+  "项目计划图", "鱼骨图", "时间线". Also trigger when the user asks to read, open, search, compare,
+  or extract nodes from .xmind files, even if they don't explicitly say "XMind" — e.g. "帮我看看这个文件",
+  "找一下脑图", "哪些任务没完成", "对比这几个文件".
 ---
 
-# XMind Mind Map Creator
+# XMind Mind Map Skill
 
-Create `.xmind` files by building a JSON structure and piping it to the bundled script.
+Create, read, and analyze `.xmind` mind map files. Supports natural Chinese and English interaction.
+
+## Natural language routing
+
+This skill supports both Chinese and English. When the user makes a request, identify the intent and route to the correct script and action. Respond in the same language the user uses.
+
+### Creation intents → `create_xmind.mjs`
+
+| User says (Chinese) | User says (English) | Route to |
+|---------------------|---------------------|----------|
+| "帮我做个思维导图" / "创建脑图" / "画个脑图" / "生成xmind" / "做个脑图" | "create a mind map" / "make an xmind" / "build a brainstorm" | `create_xmind.mjs` — standard mind map |
+| "做个项目计划" / "甘特图" / "排期" / "时间线" / "项目排期" / "里程碑" | "project plan" / "Gantt chart" / "timeline" / "schedule" / "milestones" | `create_xmind.mjs` — use planned tasks with `durationDays` + `dependencies` |
+| "画个流程图" / "逻辑图" / "算法图" / "画个程序流程" | "flowchart" / "logic diagram" / "algorithm diagram" | `create_xmind.mjs` — use `freePositioning: true` + `detachedTopics` + straight relationships |
+| "组织架构图" / "组织结构" / "人员架构" | "org chart" / "organization structure" | `create_xmind.mjs` — use `org.xmind.ui.org-chart.down` layout |
+| "鱼骨图" / "因果分析" / "根因分析" | "fishbone" / "cause and effect" / "root cause" | `create_xmind.mjs` — use `org.xmind.ui.fishbone.leftHeaded` layout |
+| "待办清单" / "任务清单" / "todo" | "todo list" / "checklist" / "task list" | `create_xmind.mjs` — use `taskStatus: "todo"/"done"` |
+| "把这个PDF/文档/内容整理成脑图" / "总结成思维导图" | "summarize as mind map" / "turn this into a mind map" | Read the source content first, then `create_xmind.mjs` |
+
+### Read/analysis intents → `read_xmind.mjs`
+
+| User says (Chinese) | User says (English) | Action | Extra params |
+|---------------------|---------------------|--------|-------------|
+| "打开这个xmind" / "看看这个脑图" / "分析一下这个思维导图" / "读取这个文件" | "open this xmind" / "read this mind map" / "analyze this file" | `read` | `path` |
+| "找一下xmind文件" / "有哪些脑图" / "列出所有思维导图" | "find xmind files" / "list mind maps" / "what xmind files are there" | `list` | `directory` |
+| "搜索脑图" / "找包含xxx的脑图" / "哪个xmind里有xxx" | "search mind maps for..." / "find the xmind with..." | `search_files` | `pattern`, `directory` |
+| "对比这几个脑图" / "同时打开这些文件" / "比较这两个思维导图" | "compare these maps" / "read multiple files" | `read_multiple` | `paths` |
+| "找到xxx节点" / "定位到xxx" / "xxx在哪个位置" | "find the node about..." / "locate..." / "where is..." | `extract_node` | `path`, `searchQuery` |
+| "查找所有待办" / "哪些任务没完成" / "还有什么没做的" / "看看做完了哪些" | "find all todos" / "what tasks are incomplete" / "show done tasks" | `search_nodes` | `taskStatus: "todo"` or `"done"` |
+| "搜索笔记内容" / "在备注里找xxx" / "哪个节点的笔记提到了xxx" | "search in notes for..." / "find notes mentioning..." | `search_nodes` | `searchIn: ["notes"]`, `query` |
+| "搜索标签" / "找带xxx标签的" | "find nodes with label..." / "search labels" | `search_nodes` | `searchIn: ["labels"]`, `query` |
+| "搜索xxx" / "在脑图里找xxx" / "全文搜索" | "search for..." / "find in map..." | `search_nodes` | `query` (searches all fields) |
+
+### Routing tips
+
+- When the user provides a `.xmind` file path and asks to "look at" / "check" / "看看" / "打开" it, use `read` action
+- When the user says "这个脑图里有什么关于xxx的" (what does this map say about xxx), use `search_nodes`
+- When the user asks about task progress ("进度怎么样" / "完成了多少"), use `search_nodes` with `searchIn: ["tasks"]`
+- When the user mentions multiple files, use `read_multiple`
+- When the request is vague about location ("找到那个关于后端的节点"), use `extract_node` for fuzzy matching
+- Always respond in the language the user used — if they speak Chinese, reply in Chinese
 
 ## How to create an XMind file
 
@@ -20,6 +65,45 @@ node <skill-dir>/scripts/create_xmind.mjs < /tmp/xmind_input.json
 ```
 
 Where `<skill-dir>` is the directory containing this SKILL.md file.
+
+## Format compatibility
+
+Both scripts handle two XMind format families:
+
+| Format | Files inside ZIP | XMind version | Default |
+|--------|-----------------|---------------|---------|
+| `zen` (modern) | `content.json`, `metadata.json`, `manifest.json` | XMind Zen, XMind 2020+ | Yes |
+| `legacy` (XML) | `content.xml`, `meta.xml`, `META-INF/manifest.xml` | XMind 3–8 (2008–2019) | No |
+
+**Reading:** Auto-detects format — no configuration needed. Checks for `content.json` first (zen), then `content.xml` (legacy). All 8 actions work identically on both formats.
+
+**Creating:** Add `"format"` to the input JSON. Accepts many version aliases:
+
+```json
+{
+  "path": "/tmp/old_format.xmind",
+  "format": "xmind8",
+  "sheets": [...]
+}
+```
+
+| Alias examples | Resolved format |
+|---------------|----------------|
+| `"zen"`, `"json"`, `"latest"`, `"modern"`, `"new"` | Modern (JSON) |
+| `"xmind2024"`, `"2024"`, `"xmind2020"`, `"2020"` | Modern (JSON) |
+| `"legacy"`, `"xml"`, `"old"` | Legacy (XML) |
+| `"xmind8"`, `"xmind7"`, `"xmind6"`, `"8"`, `"7"` | Legacy (XML) |
+| `"2013"`, `"2012"`, `"2008"` | Legacy (XML) |
+| `"pro8"`, `"pro7"` | Legacy (XML) |
+
+**Heuristic for numeric values:** version ≤ 9 → legacy (XMind 3–8), version ≥ 10 → zen (XMind 10+), year ≤ 2019 → legacy, year ≥ 2020 → zen.
+
+**Checking format:** Use `format_info` action to inspect an existing file:
+```bash
+echo '{"action": "format_info", "path": "/path/to/file.xmind"}' | node <skill-dir>/scripts/read_xmind.mjs
+```
+
+When the user says "兼容旧版" / "XMind 8格式" / "旧版本格式" / "old format" / "XMind 8 compatible" / "兼容其他编辑器", use `"format": "legacy"`. Otherwise use the default zen format.
 
 ## JSON Input Format
 
@@ -112,7 +196,7 @@ Each topic object supports:
 1. **Relative (preferred):** Use `durationDays` + `dependencies`. XMind auto-calculates dates.
 2. **Absolute:** Use `startDate` + `dueDate` for fixed dates.
 
-When the user mentions "planning", "schedule", "timeline", "Gantt", "project", "phases", use RELATIVE planned tasks unless specific dates are given.
+When the user mentions "planning", "schedule", "timeline", "Gantt", "project", "phases", "排期", "甘特图", "项目计划", "时间线", "里程碑", use RELATIVE planned tasks unless specific dates are given.
 
 ## Sheet properties
 
@@ -158,7 +242,7 @@ For flowcharts, logic diagrams, or algorithmic diagrams, use **free positioning*
 
 **Conventions:** Use **ellipse** for start/end, **diamond** for conditions, **rectangle** (default) for actions, **parallelogram** for I/O. Use `"org.xmind.relationshipShape.straight"` for all connectors. Position topics on a grid (y increments of ~130px, x offsets of ~200px for branches).
 
-When the user mentions "flowchart", "algorithm", "logic diagram", "organigramme de programmation", "diagramme logique", use this pattern.
+When the user mentions "flowchart", "algorithm", "logic diagram", "流程图", "逻辑图", "算法图", "程序流程", use this pattern.
 
 ## Working with large files
 
@@ -184,8 +268,75 @@ except FileNotFoundError:
 
 Then read `/tmp/extracted.txt` to build the mind map.
 
+## How to read and analyze XMind files
+
+Pipe a JSON object with an `action` field to the read script:
+
+```bash
+echo '{"action": "read", "path": "/path/to/file.xmind"}' | node <skill-dir>/scripts/read_xmind.mjs
+```
+
+### Available actions
+
+| Action | Input fields | Description |
+|--------|-------------|-------------|
+| `read` | `path` | Parse a .xmind file and return full mind map structure as JSON |
+| `list` | `directory` | Recursively scan a directory for .xmind files |
+| `search_files` | `pattern`, `directory` | Search for .xmind files by name or content |
+| `read_multiple` | `paths` (array) | Read multiple .xmind files at once |
+| `extract_node` | `path`, `searchQuery` | Fuzzy path search — returns top 5 matches ranked by confidence |
+| `extract_node_by_id` | `path`, `nodeId` | Extract a specific node by its XMind ID |
+| `search_nodes` | `path`, `query`, `searchIn?`, `caseSensitive?`, `taskStatus?` | Advanced multi-field search |
+| `format_info` | `path` | Detect XMind format version (zen/legacy) and list internal files |
+
+### Action details
+
+**`read`** — Parse a complete mind map:
+```bash
+echo '{"action": "read", "path": "/path/to/file.xmind"}' | node <skill-dir>/scripts/read_xmind.mjs
+```
+Returns an array of sheets, each with a root topic containing the full tree structure including notes, labels, markers, task status, relationships, etc.
+
+**`list`** — Find .xmind files in a directory:
+```bash
+echo '{"action": "list", "directory": "/Users/user/Documents"}' | node <skill-dir>/scripts/read_xmind.mjs
+```
+
+**`search_files`** — Search by filename or content:
+```bash
+echo '{"action": "search_files", "pattern": "project", "directory": "/Users/user"}' | node <skill-dir>/scripts/read_xmind.mjs
+```
+Filename matches are returned first, then content matches.
+
+**`extract_node`** — Fuzzy search when you don't know the exact path:
+```bash
+echo '{"action": "extract_node", "path": "/path/to/file.xmind", "searchQuery": "Backend API"}' | node <skill-dir>/scripts/read_xmind.mjs
+```
+Returns top 5 matches with confidence scores. Use when exploring complex maps.
+
+**`extract_node_by_id`** — Direct ID lookup (fastest):
+```bash
+echo '{"action": "extract_node_by_id", "path": "/path/to/file.xmind", "nodeId": "abc123def456"}' | node <skill-dir>/scripts/read_xmind.mjs
+```
+
+**`search_nodes`** — Advanced search with filters:
+```bash
+echo '{"action": "search_nodes", "path": "/path/to/file.xmind", "query": "auth", "searchIn": ["title", "notes"], "taskStatus": "todo"}' | node <skill-dir>/scripts/read_xmind.mjs
+```
+`searchIn` options: `title`, `notes`, `labels`, `callouts`, `tasks`. Default: all fields.
+
+### When to use each action
+
+- **Browsing/understanding a map**: Use `read` to get the full structure
+- **Finding .xmind files**: Use `list` or `search_files`
+- **Navigating to a specific topic**: Use `extract_node` (fuzzy) or `extract_node_by_id` (exact)
+- **Finding content across a map**: Use `search_nodes` with appropriate `searchIn` filters
+- **Filtering tasks**: Use `search_nodes` with `taskStatus: "todo"` or `"done"`
+- **Comparing maps**: Use `read_multiple` to load several files at once
+
 ## Important rules
 
+- **NEVER use `unzip`, `zipinfo`, or any external ZIP tool on .xmind files.** Both scripts handle ZIP internally — `create_xmind.mjs` writes ZIP with built-in code, `read_xmind.mjs` reads ZIP with built-in code. Just pipe JSON to the script and it handles everything. There is no need to extract, decompress, or inspect the .xmind file yourself.
 - The output path MUST end with `.xmind`
 - Always write the file where the user requests (e.g. ~/Downloads, ~/Desktop)
 - IDs are generated automatically
@@ -193,3 +344,5 @@ Then read `/tmp/extracted.txt` to build the mind map.
 - HTML notes: only `<strong>`, `<u>`, `<ul>`, `<ol>`, `<li>`, `<br>` are supported. `<code>` is NOT supported by XMind.
 - Internal links (`linkToTopic`) work across sheets
 - **Notes should be substantial and detailed** — don't just repeat the topic title. Use notes to add explanations, context, definitions, examples, key points, or reasoning. Aim for 2-5 sentences minimum per note. Use HTML notes with `<strong>`, `<ul>`/`<li>`, `<br>` for well-structured content. Most topics should have notes unless they are self-explanatory leaf nodes.
+- The read script outputs JSON to stdout — pipe or redirect as needed
+- All read actions require the `action` field in the input JSON

@@ -1,14 +1,15 @@
 # CLAUDE.md
 
 ## Build & Test
-- `npm run build` — compile TS (tsc) + chmod dist/*.js
-- `npm test` — vitest run
-- `npx @modelcontextprotocol/inspector node dist/index.js /Users/alex/tmp/xmind` — test interactif MCP
+- `npm run build:skill` — package skill into `build/xmind-skill.zip`
+- `npm run test:create` — quick smoke test for create script
+- `npm run test:read` — quick smoke test for read script
 
 ## Architecture
-- Single file server: `index.ts` (racine, pas src/)
-- Tests: `test/xmind-server.test.ts` avec helpers dans `test/helpers.ts`
-- tsconfig: rootDir=`.`, outDir=`dist/`, exclut `test/` du build
+- Skill definition: `skills/xmind/SKILL.md`
+- Create script: `skills/xmind/scripts/create_xmind.mjs` — zero npm deps (ZIP via `zlib.deflateRawSync`)
+- Read script: `skills/xmind/scripts/read_xmind.mjs` — zero npm deps (ZIP via `zlib.inflateRawSync`)
+- Build script: `scripts/build-skill.sh`
 
 ## XMind Format
 - Fichier .xmind = ZIP contenant `content.json`, `metadata.json`, `manifest.json`
@@ -17,16 +18,16 @@
 - `topicOverlapping: "overlap"` requis au niveau sheet
 - Notes HTML : `realHTML.content` (balises supportées: `<strong>`, `<u>`, `<ul>`, `<ol>`, `<li>`, `<br>`) — `<code>` non supporté par XMind
 - Liens internes entre topics/sheets : `href: "xmind:#<topicId>"`
+- Legacy format (XMind 8): XML-based (`content.xml`, `meta.xml`, `META-INF/manifest.xml`)
 
 ## Patterns
 - IDs générés via `crypto.randomUUID()` tronqué à 26 chars sans tirets
 - Résolution par titre (relationships, dependencies, linkToTopic) : stocker title→id dans un Map, résoudre après construction
-- TypeScript : utiliser `NonNullable<T>` pour accéder aux éléments d'arrays optionnels dans les interfaces
-- Tests : `testDirPath` pour les fichiers créés par create_xmind (pas `tempDir`)
+- Tests : `echo JSON | node skills/xmind/scripts/create_xmind.mjs` pour tester la création
+- Both scripts read JSON from stdin and are fully standalone (no npm install needed)
 
 ## Skill
-- `skills/xmind/` : skill standalone pour Claude Desktop (création uniquement, pas de lecture)
-- Script : `skills/xmind/scripts/create_xmind.mjs` — zéro dépendance npm (ZIP inline avec `zlib.deflateRawSync`)
-- Build : `cd skills/xmind && zip -r xmind-skill.zip SKILL.md scripts/`
-- Test : `echo '{"path":"/tmp/test.xmind","sheets":[{"title":"T","rootTopic":{"title":"R"}}]}' | node skills/xmind/scripts/create_xmind.mjs`
-- Claude Code : `ln -s /path/to/mcp-xmind/skills/xmind ~/.claude/skills/xmind` (ou `.claude/skills/` par projet)
+- `skills/xmind/` : skill standalone pour Claude Desktop et Claude Code
+- Scripts : `create_xmind.mjs` (création) + `read_xmind.mjs` (lecture/analyse)
+- Build : `npm run build:skill` → `build/xmind-skill.zip`
+- Claude Code : `ln -s /path/to/mcp-xmind/skills/xmind ~/.claude/skills/xmind`
